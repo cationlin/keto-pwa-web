@@ -207,7 +207,7 @@
       '<div class="boot-err-hint" style="font-size:12px;color:var(--muted);margin-top:6px">通常是依赖项（如 Bridge/Store）异步未就绪。直接点「重试」可恢复。</div>' +
       retryBtn + '</div>';
     // 只在视图仍空/是骨架时覆盖，避免覆盖已有内容
-    if (!el.innerHTML || el.querySelector('.boot-skeleton, .boot-error')) el.innerHTML = html;
+    el.innerHTML = html;
   }
   App.go = function (view, opts) {
     opts = opts || {};
@@ -509,6 +509,21 @@
       }, d);
     });
   }
+  // v2.2.3 终极兜底：load 事件后若首屏仍是 boot-skeleton，强制再调一次 onShow。
+  // 覆盖"start() 跑过但 onShow 因任何原因被静默吞掉"的所有场景（GitHub Pages https 环境下曾复现）。
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      try {
+        var v = (global.App && App.currentView) || 'checkin';
+        var el = document.getElementById('view-' + v);
+        if (el && el.querySelector('.boot-skeleton') && global.App && global.App[v] && typeof global.App[v].onShow === 'function') {
+          global.App[v].onShow(el);
+          console.log('[v2.2.3 backup] 强制重渲 view-' + v);
+        }
+      } catch (e) { console.warn('[v2.2.3 backup] onShow 失败', e); }
+    }, 400);
+  });
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })(window);
