@@ -1,6 +1,7 @@
 // sw.js — 极简 Service Worker：缓存静态资源，支持离线打开
-// v12：成员身份体系（爸爸/妈妈/逸凡 顶栏切换+数据隔离）+ 食谱份量缩放/厨房模式/全家适配/食材挑选教学 + 周菜单采购清单(meal-plan.js)
-var CACHE = 'keto-pwa-v14';
+// v15：① 缓存名升级（清掉旧版冻结的 app.js/cloudbase.js 缓存）② fetch 改为「代码类网络优先 + 图片类缓存优先」
+//       —— 保证以后每次发版用户自动拿到最新代码，不再被旧 SW 缓存卡死首屏
+var CACHE = 'keto-pwa-v15';
 
 // 基础资源（必须）
 var ASSETS = [
@@ -34,14 +35,43 @@ self.addEventListener('activate', function (e) {
   self.clients.claim();
 });
 
+// 判断请求类型：代码/HTML 走网络优先，图片/视频走缓存优先（离线可用）
+function isCodeAsset(url) {
+  var u = url.split('?')[0];
+  return /\.(js|css|html?|webmanifest|json)$/i.test(u);
+}
+
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request).then(function (hit) {
-    return hit || fetch(e.request).then(function (res) {
-      // 运行时缓存：webp/png/mp4/svg 等按需缓存（含 20 段动作视频首次播放后离线可用）
-      var copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
-      return res;
-    }).catch(function () { return hit; });
-  }));
+  var url = e.request.url;
+
+  // 跨域 / 非本域请求：直接放行，不拦截
+  if (url.indexOf(self.location.origin) !== 0) {
+    e.respondWith(fetch(e.request).catch(function () { return caches.match(e.request); }));
+    return;
+  }
+
+  if (isCodeAsset(url)) {
+    // 网络优先：永远先拿最新代码，失败再退回缓存（保证发版即时生效）
+    e.respondWith(
+      fetch(e.request).then(function (res) {
+        if (res && res.ok) {
+          var copy = res.clone();
+          caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(e.request).then(function (hit) { return hit || fetch(e.request); });
+      })
+    );
+  } else {
+    // 图片/视频：缓存优先 + 运行时回填（离线可用、首屏快）
+    e.respondWith(caches.match(e.request).then(function (hit) {
+      return hit || fetch(e.request).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+        return res;
+      }).catch(function () { return hit; });
+    }));
+  }
 });
