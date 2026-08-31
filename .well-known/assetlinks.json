@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.keto.webapp",
+      "sha256_cert_fingerprints": ["64:B1:F8:0A:04:52:4C:A0:59:16:F3:95:C9:96:91:95:48:6C:70:74:CA:89:22:44:E9:5B:2A:FF:0B:3D:10:71"]
+    }
+  }
+]
