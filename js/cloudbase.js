@@ -44,6 +44,17 @@
         return resolve(false);
       }
       if (!ENV_ID) { available = false; return resolve(false); }
+      // v2.2.3：6s 硬超时，绝不永久 pending。
+      // GitHub Pages / 其他 https 部署下，cloudbase.init + signInAnonymously
+      // 若因 CORS/网络/DNS 卡住，会让 _ready 永远 pending；虽然本调用 fire-and-forget，
+      // 但 timeout 仍能避免 SDK 副作用污染与日志噪音，并尽早走 localStorage 降级。
+      var done = false;
+      var tid = setTimeout(function () {
+        if (done) return; done = true;
+        available = false;
+        console.warn('[CloudSync] 初始化超时（6s），降级为本地存储');
+        resolve(false);
+      }, 6000);
       loadSdk().then(function (cloudbase) {
         return cloudbase.init({ env: ENV_ID }).then(function (app) {
           _app = app;
@@ -52,10 +63,12 @@
         }).then(function (user) {
           _uid = user && user.uid ? user.uid : null;
           available = true;
+          if (done) return; done = true; clearTimeout(tid);
           console.log('[CloudSync] 已连接云端，uid=' + _uid);
           resolve(true);
         });
       }).catch(function (e) {
+        if (done) return; done = true; clearTimeout(tid);
         available = false;
         console.warn('[CloudSync] 初始化失败，降级为本地存储：', e.message);
         resolve(false);
